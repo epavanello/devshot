@@ -12,7 +12,7 @@ A free, opinionated screenshot beautifier for humans and MCP agents. No AI, no a
 
 ## What it does
 
-- Single-page drag-and-drop editor
+- Single-page drag, drop and clipboard-paste editor
 - Pop gradient backgrounds
 - Padding, aspect ratio, crop, rounded corners and shadows
 - PNG or JPEG export up to 4096 px wide

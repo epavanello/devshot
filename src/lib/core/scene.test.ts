@@ -13,5 +13,7 @@ describe('scene document', () => {
     expect(html).toContain(pixel);
     expect(html).toContain('linear-gradient');
     expect(html).toContain('id="shot"');
+    expect(html).toContain('context.drawElementImage(scene, 0, 0, 1600, 900);');
+    expect(html).not.toContain('preserveElementGeometry');
   });
 });

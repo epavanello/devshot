@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node build",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "brand:generate": "node scripts/generate-brand-assets.mjs",
+    "brand:check": "node scripts/generate-brand-assets.mjs --check",
+    "check": "pnpm brand:check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
@@ -22,6 +26,7 @@
   },
   "devDependencies": {
     "@lucide/svelte": "1.25.0",
+    "@resvg/resvg-js": "2.6.2",
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@types/node": "26.2.0",
     "svelte-check": "4.7.5",

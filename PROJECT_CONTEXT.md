@@ -6,7 +6,7 @@ The differentiator is not AI. It is deterministic taste: a short set of strong b
 
 ## Primary experience
 
-1. Drop a PNG, JPEG or WebP screenshot.
+1. Drop, choose or paste a PNG, JPEG or WebP screenshot.
 2. See it rendered inside an HTML-in-Canvas scene.
 3. Choose a background, ratio, fit, padding, radius, shadow and output width.
 4. Download the rendered image.

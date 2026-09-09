@@ -18,16 +18,31 @@
   let supported = $state<boolean | null>(null);
   let endpoint = $state('https://your-devshot.app/mcp');
 
+  const acceptedImageTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
   const scene = $derived(imageDataUrl ? createSceneDocument({ imageDataUrl, sourceWidth, sourceHeight, options }) : '');
   const installCommand = $derived(`claude mcp add --transport http devshot ${endpoint}`);
 
   onMount(() => {
     supported = 'drawElementImage' in CanvasRenderingContext2D.prototype && 'requestPaint' in HTMLCanvasElement.prototype;
     endpoint = `${location.origin}/mcp`;
+
+    const handlePaste = (event: ClipboardEvent) => {
+      const image = Array.from(event.clipboardData?.items ?? [])
+        .find((item) => item.kind === 'file' && acceptedImageTypes.has(item.type))
+        ?.getAsFile();
+
+      if (!image) return;
+      event.preventDefault();
+      void loadFile(image);
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
   });
 
   async function loadFile(file?: File) {
-    if (!file || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return;
+    if (!file || !acceptedImageTypes.has(file.type)) return;
     const value = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
@@ -80,7 +95,7 @@
 </svelte:head>
 
 <header class="topbar">
-  <a class="brand" href="/" aria-label="DevShot home"><span class="brand-mark">D</span><span>DevShot</span><b>LABS</b></a>
+  <a class="brand" href="/" aria-label="DevShot home"><img class="brand-mark" src="/favicon.svg" alt=""><span>DevShot</span><b>LABS</b></a>
   <div class="top-actions"><span class="free-pill">FREE FOREVER</span><a href="#mcp">MCP FOR AGENTS</a></div>
 </header>
 
@@ -103,7 +118,7 @@
 
   <section class="workspace" class:is-unsupported={supported === false}>
     <div class="stage-shell">
-      <div class="stage-toolbar"><span>LIVE CANVAS</span><span>{options.width}px · {options.aspectRatio}</span></div>
+      <div class="stage-toolbar"><span>LIVE CANVAS · PASTE TO {imageDataUrl ? 'REPLACE' : 'START'}</span><span>{options.width}px · {options.aspectRatio}</span></div>
       {#if imageDataUrl}
         <iframe title="DevShot preview" srcdoc={scene}></iframe>
         <label class="replace-button">Replace image<input type="file" accept="image/png,image/jpeg,image/webp" onchange={(event) => loadFile(event.currentTarget.files?.[0])}></label>
@@ -117,8 +132,8 @@
         >
           <input type="file" accept="image/png,image/jpeg,image/webp" onchange={(event) => loadFile(event.currentTarget.files?.[0])}>
           <span class="drop-icon"><ImagePlus size={30} /></span>
-          <strong>Drop it like it’s hot.</strong>
-          <small>PNG, JPG or WebP up to 20 MB</small>
+          <strong>Drop it or paste it.</strong>
+          <small>PNG, JPG or WebP · ⌘V / Ctrl V anywhere</small>
           <span class="browse">Choose screenshot</span>
         </label>
       {/if}

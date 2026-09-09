@@ -59,7 +59,7 @@ export function createSceneDocument(input: SceneInput): string {
       const context = canvas.getContext('2d');
       canvas.onpaint = () => {
         context.reset();
-        context.drawElementImage(scene, 0, 0, ${width}, ${height}, { preserveElementGeometry: true });
+        context.drawElementImage(scene, 0, 0, ${width}, ${height});
         window.__DEVSHOT_READY__ = true;
       };
       source.decode().then(() => canvas.requestPaint());
