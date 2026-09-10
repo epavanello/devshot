@@ -15,15 +15,16 @@ A free, opinionated screenshot beautifier for humans and MCP agents. No AI, no a
 ## What it does
 
 - Single-page drag, drop and clipboard-paste editor
-- Image, public website, Shiki code and terminal sources
+- Image, full-height public website, Shiki code and terminal sources
 - Pop gradient backgrounds
 - Opinionated clean, browser and poster frames
+- Clean, pop, noir, acid and dream looks plus glow, orbit and grid HTML-in-Canvas effects
 - Padding, aspect ratio, drag-to-focus crop, zoom, rounded corners and shadows
 - PNG or JPEG export up to 4096 px wide
-- Local download and copy-as-PNG, with server rendering when the client API is unavailable
+- Local download and copy-as-PNG, with on-demand server preview when the client API is unavailable
 - Public Streamable HTTP MCP endpoint
 - Finished image returned directly to the agent
-- One rendering contract shared by preview, HTTP and MCP
+- One Svelte HTML-in-Canvas renderer shared by preview, HTTP and MCP
 - Mandatory bottom-right watermark with the official DevShot mark and website
 
 ## Experimental browser requirement
@@ -37,6 +38,8 @@ chrome://flags/#canvas-draw-element
 ```
 
 The server launches the locally installed Chrome Beta channel with `CanvasDrawElement` enabled. If Chrome Beta is missing, export and MCP calls fail with an explicit setup error.
+
+Website capture uses a fixed 1440 px desktop or 390 px mobile viewport and preserves the full page height for drag-to-focus framing.
 
 Install the required browser distribution with:
 

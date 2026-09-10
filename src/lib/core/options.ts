@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
 export const backgroundIds = ['lemonade', 'bubblegum', 'electric', 'sunset', 'midnight', 'paper'] as const;
-export const aspectRatios = ['original', '1:1', '16:9', '4:3', '3:2', '9:16'] as const;
+export const aspectRatios = ['original', '1:1', '16:9', '4:3', '3:2', '2:1', '9:16', '4:5'] as const;
 export const fitModes = ['contain', 'cover'] as const;
 export const shadowStyles = ['none', 'soft', 'float', 'hard'] as const;
 export const outputFormats = ['png', 'jpeg'] as const;
 export const frameStyles = ['clean', 'browser', 'poster'] as const;
+export const looks = ['clean', 'pop', 'noir', 'acid', 'dream'] as const;
+export const effects = ['none', 'glow', 'orbit', 'grid'] as const;
 
 export const beautifyOptionsSchema = z.object({
   background: z.enum(backgroundIds).default('lemonade'),
@@ -15,6 +17,8 @@ export const beautifyOptionsSchema = z.object({
   radius: z.number().int().min(0).max(96).default(24),
   shadow: z.enum(shadowStyles).default('float'),
   style: z.enum(frameStyles).default('clean'),
+  look: z.enum(looks).default('clean'),
+  effect: z.enum(effects).default('glow'),
   focusX: z.number().min(0).max(1).default(0.5),
   focusY: z.number().min(0).max(1).default(0.5),
   zoom: z.number().min(1).max(4).default(1),

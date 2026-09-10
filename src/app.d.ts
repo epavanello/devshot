@@ -2,7 +2,7 @@ declare global {
   namespace App {}
 
   interface Window {
-    __DEVSHOT_READY__?: boolean;
+    __DEVSHOT_RENDER__?: (input: import('$lib/core/scene-model').SceneInput) => Promise<void>;
   }
 
   interface CanvasRenderingContext2D {
@@ -14,6 +14,16 @@ declare global {
 
   interface HTMLCanvasElement {
     requestPaint(): void;
+  }
+}
+
+declare module 'svelte/elements' {
+  interface HTMLAttributes<T> {
+    drawable?: boolean | '';
+  }
+
+  interface HTMLCanvasAttributes {
+    layoutsubtree?: boolean | '';
   }
 }
 

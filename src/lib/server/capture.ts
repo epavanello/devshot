@@ -75,11 +75,25 @@ export async function captureWebsite(value: string, viewportName: CaptureViewpor
     const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 15_000 });
     if (!response) throw new Error('The website did not return a document');
     if (response.status() >= 400) throw new Error(`The website returned HTTP ${response.status()}`);
-    await page.addStyleTag({ content: '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}' });
+    if (viewport.isMobile) await page.evaluate(() => {
+      let viewportMeta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+      if (!viewportMeta) {
+        viewportMeta = document.createElement('meta');
+        viewportMeta.name = 'viewport';
+        document.head.append(viewportMeta);
+      }
+      viewportMeta.content = 'width=device-width, initial-scale=1';
+    });
+    await page.addStyleTag({ content: 'html,body{overflow-x:clip!important}*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}' });
     await page.evaluate(() => document.fonts.ready).catch(() => undefined);
     await page.waitForTimeout(350);
-    const buffer = await page.screenshot({ type: 'png', animations: 'disabled' });
-    return { buffer, width: viewport.width, height: viewport.height, finalUrl: page.url() };
+    const buffer = await page.screenshot({ type: 'png', animations: 'disabled', fullPage: true });
+    return {
+      buffer,
+      width: buffer.readUInt32BE(16),
+      height: buffer.readUInt32BE(20),
+      finalUrl: page.url()
+    };
   } finally {
     await context.close();
   }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Download from '@lucide/svelte/icons/download';
   import ImagePlus from '@lucide/svelte/icons/image-plus';
   import Sparkles from '@lucide/svelte/icons/sparkles';
@@ -12,8 +12,9 @@
   import Code2 from '@lucide/svelte/icons/code-2';
   import { toast } from 'svelte-sonner';
   import { Button } from '$lib/components/ui/button';
+  import CanvasRenderer from '$lib/components/scene/CanvasRenderer.svelte';
   import { backgrounds, beautifyOptionsSchema, type BeautifyOptions } from '$lib/core/options';
-  import { createSceneDocument, type SceneInput } from '$lib/core/scene';
+  import type { SceneInput } from '$lib/core/scene-model';
   import { getMcpUrl, getSiteUrl } from '$lib/config/site';
 
   type SourceMode = 'empty' | 'image' | 'website' | 'snippet';
@@ -34,21 +35,16 @@
   let websiteUrl = $state('');
   let dragging = $state(false);
   let capturing = $state(false);
-  let sceneA = $state('');
-  let sceneB = $state('');
-  let sceneGenerationA = 0;
-  let sceneGenerationB = 0;
-  let activeSceneSlot = $state<-1 | 0 | 1>(-1);
+  let sourceRevision = $state(0);
+  let previewCanvas = $state<HTMLCanvasElement>();
+  let localRenderedVersion = $state('');
   let serverPreviewUrl = $state('');
-  let sceneLoading = $state(false);
+  let serverPreviewVersion = $state('');
+  let serverLoading = $state(false);
   let copiedInstall = $state(false);
   let supported = $state<boolean | null>(null);
-  let previewFrame = $state<HTMLIFrameElement>();
-  let previewFrameA = $state<HTMLIFrameElement>();
-  let previewFrameB = $state<HTMLIFrameElement>();
   let panning = $state(false);
   let lastPointer = { x: 0, y: 0 };
-  let sceneGeneration = 0;
 
   const siteUrl = getSiteUrl();
   const endpoint = getMcpUrl();
@@ -56,134 +52,48 @@
   const acceptedImageTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
   const hasSource = $derived(sourceMode === 'snippet' ? Boolean(snippetContent.trim()) : Boolean(imageDataUrl));
   const visualSource = $derived(sourceMode === 'image' || sourceMode === 'website');
-
-  $effect(() => {
-    const currentOptions = { ...options };
-    const currentMode = sourceMode;
-    const currentImage = imageDataUrl;
-    const currentContent = snippetContent;
-    const currentSnippetMode = snippetMode;
-    const currentLanguage = language;
-    const currentLabel = sourceLabel;
-    const currentSupported = supported;
-    const width = sourceWidth;
-    const height = sourceHeight;
-    if ((currentMode === 'snippet' && !currentContent.trim()) ||
-      ((currentMode === 'image' || currentMode === 'website') && !currentImage)) {
-      sceneA = '';
-      sceneB = '';
-      activeSceneSlot = -1;
-      previewFrame = undefined;
-      if (serverPreviewUrl) URL.revokeObjectURL(serverPreviewUrl);
-      serverPreviewUrl = '';
-      sceneLoading = false;
-      return;
-    }
-    if (currentMode === 'empty' || currentSupported === null) return;
-    const generation = ++sceneGeneration;
-    sceneLoading = true;
-    const timeout = setTimeout(async () => {
-      try {
-        const input: SceneInput = currentMode === 'snippet'
-          ? { kind: currentSnippetMode, content: currentContent, language: currentLanguage, label: currentLabel, siteUrl, options: currentOptions }
-          : { kind: currentMode, imageDataUrl: currentImage, sourceWidth: width, sourceHeight: height, label: currentLabel, siteUrl, options: currentOptions };
-        if (currentSupported) {
-          const document = await createSceneDocument(input);
-          if (generation === sceneGeneration) queueScene(document, generation);
-        } else {
-          await queueServerPreview(currentMode === 'snippet'
-            ? { kind: currentSnippetMode, content: currentContent, language: currentLanguage, label: currentLabel, options: { ...currentOptions, format: 'png' } }
-            : { kind: currentMode, imageDataUrl: currentImage, sourceWidth: width, sourceHeight: height, label: currentLabel, options: { ...currentOptions, format: 'png' } }, generation);
-        }
-      } catch (error) {
-        if (generation === sceneGeneration) {
-          sceneLoading = false;
-          if (currentSupported) toast.error(errorMessage(error));
-          else renderFailure(error, 'Server preview unavailable.', 'server-preview');
-        }
-      }
-    }, currentMode === 'snippet' ? 180 : currentSupported ? 45 : 120);
-    return () => clearTimeout(timeout);
+  const sceneInput = $derived.by<SceneInput | undefined>(() => {
+    if (!hasSource) return undefined;
+    return sourceMode === 'snippet'
+      ? { kind: snippetMode, content: snippetContent, language, label: sourceLabel, siteUrl, options: { ...options } }
+      : { kind: sourceMode as 'image' | 'website', imageDataUrl, sourceWidth, sourceHeight, label: sourceLabel, siteUrl, options: { ...options } };
   });
+  const sceneVersion = $derived(`${sourceRevision}:${sourceMode}:${snippetMode}:${language}:${sourceLabel}:${snippetContent}:${JSON.stringify(options)}`);
+  const previewDirty = $derived(supported === false && hasSource && serverPreviewVersion !== sceneVersion);
+  const sceneLoading = $derived(serverLoading || (supported === true && hasSource && localRenderedVersion !== sceneVersion));
 
-  function queueScene(document: string, generation: number) {
-    if (serverPreviewUrl) {
-      URL.revokeObjectURL(serverPreviewUrl);
-      serverPreviewUrl = '';
-    }
-    const slot = activeSceneSlot === 0 ? 1 : 0;
-    if (slot === 0) {
-      sceneGenerationA = generation;
-      sceneA = document;
-    } else {
-      sceneGenerationB = generation;
-      sceneB = document;
-    }
-  }
-
-  async function queueServerPreview(body: Record<string, unknown>, generation: number) {
-    const response = await fetch('/api/beautify', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    if (!response.ok) throw new Error(await response.text());
-    const url = URL.createObjectURL(await response.blob());
-    const image = new Image();
-    image.src = url;
+  async function updateServerPreview() {
+    if (!hasSource) return;
+    const requestedVersion = sceneVersion;
+    serverLoading = true;
     try {
-      await image.decode();
-    } catch (error) {
-      URL.revokeObjectURL(url);
-      throw error;
-    }
-    if (generation !== sceneGeneration) {
-      URL.revokeObjectURL(url);
-      return;
-    }
-    const previousUrl = serverPreviewUrl;
-    serverPreviewUrl = url;
-    sceneA = '';
-    sceneB = '';
-    activeSceneSlot = -1;
-    previewFrame = undefined;
-    sceneLoading = false;
-    if (previousUrl) setTimeout(() => URL.revokeObjectURL(previousUrl), 0);
-  }
-
-  async function sceneFrameLoaded(slot: 0 | 1) {
-    const frame = slot === 0 ? previewFrameA : previewFrameB;
-    const generation = slot === 0 ? sceneGenerationA : sceneGenerationB;
-    if (!frame || !generation) return;
-    for (let attempt = 0; attempt < 90; attempt += 1) {
-      const currentGeneration = slot === 0 ? sceneGenerationA : sceneGenerationB;
-      if (generation !== currentGeneration || generation !== sceneGeneration) return;
-      const frameWindow = frame.contentWindow as (Window & { __DEVSHOT_READY__?: boolean }) | null;
-      if (frameWindow?.__DEVSHOT_READY__) {
-        const previousSlot = activeSceneSlot;
-        const previousGeneration = previousSlot === 0 ? sceneGenerationA : previousSlot === 1 ? sceneGenerationB : 0;
-        activeSceneSlot = slot;
-        previewFrame = frame;
-        sceneLoading = false;
-        if (previousSlot !== -1 && previousSlot !== slot) {
-          setTimeout(() => {
-            if (activeSceneSlot !== slot) return;
-            if (previousSlot === 0 && sceneGenerationA === previousGeneration) {
-              sceneA = '';
-              sceneGenerationA = 0;
-            } else if (previousSlot === 1 && sceneGenerationB === previousGeneration) {
-              sceneB = '';
-              sceneGenerationB = 0;
-            }
-          }, 180);
-        }
+      const response = await fetch('/api/beautify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(requestBody('png'))
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const url = URL.createObjectURL(await response.blob());
+      const image = new Image();
+      image.src = url;
+      try {
+        await image.decode();
+      } catch (error) {
+        URL.revokeObjectURL(url);
+        throw error;
+      }
+      if (requestedVersion !== sceneVersion) {
+        URL.revokeObjectURL(url);
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, 34));
-    }
-    if (generation === sceneGeneration) {
-      sceneLoading = false;
-      toast.error('The preview canvas did not finish rendering.');
+      const previousUrl = serverPreviewUrl;
+      serverPreviewUrl = url;
+      serverPreviewVersion = requestedVersion;
+      if (previousUrl) setTimeout(() => URL.revokeObjectURL(previousUrl), 0);
+    } catch (error) {
+      renderFailure(error, 'Server preview unavailable.', 'server-preview');
+    } finally {
+      serverLoading = false;
     }
   }
 
@@ -263,7 +173,12 @@
     sourceLabel = language === 'text' ? 'snippet.txt' : `snippet.${language}`;
     options.style = 'clean';
     options.aspectRatio = '16:9';
+    sourceRevision += 1;
     draft = '';
+    if (supported === false) {
+      await tick();
+      void updateServerPreview();
+    }
   }
 
   async function loadFile(file?: File) {
@@ -291,6 +206,11 @@
       sourceLabel = file.name;
       options.style = 'clean';
       resetFocus(false);
+      sourceRevision += 1;
+      if (supported === false) {
+        await tick();
+        void updateServerPreview();
+      }
     } catch (error) {
       toast.error('Could not read that image.', { description: errorMessage(error) });
     }
@@ -332,6 +252,11 @@
       options.style = 'browser';
       options.fit = 'cover';
       resetFocus(false);
+      sourceRevision += 1;
+      if (supported === false) {
+        await tick();
+        void updateServerPreview();
+      }
       toast.success('Website captured.', { description: `${result.sourceWidth} × ${result.sourceHeight}` });
     } catch (error) {
       const message = errorMessage(error);
@@ -356,14 +281,21 @@
   }
 
   async function waitForLocalCanvas(): Promise<HTMLCanvasElement | null> {
-    if (!supported || !previewFrame?.contentDocument) return null;
+    if (!supported) return null;
     for (let attempt = 0; attempt < 90; attempt += 1) {
-      const frameWindow = previewFrame.contentWindow as (Window & { __DEVSHOT_READY__?: boolean }) | null;
-      const canvas = previewFrame.contentDocument.querySelector<HTMLCanvasElement>('#shot');
-      if (frameWindow?.__DEVSHOT_READY__ && canvas) return canvas;
+      if (previewCanvas && localRenderedVersion === sceneVersion) return previewCanvas;
       await new Promise((resolve) => setTimeout(resolve, 34));
     }
     return null;
+  }
+
+  function localRendered(canvas: HTMLCanvasElement, version: string | number) {
+    previewCanvas = canvas;
+    localRenderedVersion = String(version);
+  }
+
+  function localRenderFailed(error: unknown) {
+    renderFailure(error, 'Preview unavailable.', 'local-preview');
   }
 
   async function renderedBlob(format: 'png' | 'jpeg'): Promise<Blob> {
@@ -436,6 +368,7 @@
 
   function beginPan(event: PointerEvent) {
     if (!visualSource || !hasSource || options.fit !== 'cover' || (event.target as HTMLElement).closest('button,label,input')) return;
+    event.preventDefault();
     panning = true;
     lastPointer = { x: event.clientX, y: event.clientY };
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
@@ -491,23 +424,24 @@
       class:panning
       class="stage-shell"
       role="presentation"
-      onpointerdown={beginPan}
-      onpointermove={movePan}
-      onpointerup={endPan}
-      onpointercancel={endPan}
+      ondragstart={(event) => event.preventDefault()}
     >
       <div class="stage-toolbar"><span>LIVE CANVAS · {visualSource && hasSource ? options.fit === 'cover' ? 'ZOOM · DRAG TO FOCUS' : 'FIT · FULL IMAGE' : sourceMode === 'snippet' ? 'EDIT IN THE PANEL' : 'PASTE TO START'}</span><span>{options.width}px · {options.aspectRatio}</span></div>
-      {#if serverPreviewUrl}
-        <img class="server-preview" src={serverPreviewUrl} alt="DevShot server-rendered preview">
+      {#if capturing}<div class="capture-progress" aria-live="polite"><span></span><strong>Capturing the full page…</strong><small>{websiteViewport === 'desktop' ? '1440 px desktop' : '390 px mobile'}</small></div>{/if}
+      {#if supported === true && sceneInput}
+        <div class="canvas-preview">
+          <CanvasRenderer input={sceneInput} version={sceneVersion} fit bind:canvas={previewCanvas} onrender={localRendered} onerror={localRenderFailed} />
+        </div>
+        {#if sceneLoading}<div class="stage-loading overlay"><Sparkles size={24} /> Rendering…</div>{/if}
         {#if visualSource && options.fit === 'cover'}<span class="zoom-pill">{Math.round(options.zoom * 100)}%</span>{/if}
-      {:else if sceneA || sceneB}
-        <iframe bind:this={previewFrameA} class:active-preview={activeSceneSlot === 0} title="DevShot preview" srcdoc={sceneA} onload={() => void sceneFrameLoaded(0)}></iframe>
-        <iframe bind:this={previewFrameB} class:active-preview={activeSceneSlot === 1} title="DevShot preview buffer" srcdoc={sceneB} onload={() => void sceneFrameLoaded(1)}></iframe>
+      {:else if supported === false && serverPreviewUrl}
+        <img class="server-preview" src={serverPreviewUrl} alt="DevShot server-rendered preview">
+        {#if previewDirty}<button class="stale-preview" onclick={updateServerPreview} disabled={serverLoading}>Update preview</button>{/if}
         {#if visualSource && options.fit === 'cover'}<span class="zoom-pill">{Math.round(options.zoom * 100)}%</span>{/if}
       {:else if sceneLoading}
         <div class="stage-loading"><Sparkles size={24} /> Building the frame…</div>
       {:else if hasSource}
-        <div class="stage-unavailable"><Sparkles size={24} /><strong>Preview unavailable.</strong><span>Your source is still loaded. Check the rendering setup, then change any option to retry.</span></div>
+        <div class="stage-unavailable"><Sparkles size={24} /><strong>Preview ready to render.</strong><span>Your source is loaded. Server mode updates only when requested.</span><Button size="sm" variant="accent" onclick={updateServerPreview}>Update preview</Button></div>
       {:else}
         <div
           class:dragging
@@ -531,6 +465,9 @@
           </div>
         </div>
       {/if}
+      {#if visualSource && hasSource && options.fit === 'cover'}
+        <div class="pan-surface" role="presentation" onpointerdown={beginPan} onpointermove={movePan} onpointerup={endPan} onpointercancel={endPan}></div>
+      {/if}
     </div>
 
     <aside class="controls">
@@ -551,15 +488,20 @@
 
         <fieldset><legend>BACKGROUND</legend><div class="swatches">{#each Object.entries(backgrounds) as [id, background]}<button class:active={options.background === id} style={`--swatch:linear-gradient(135deg,${background.colors.join(',')})`} onclick={() => options.background = id as BeautifyOptions['background']} aria-label={background.label}><span></span></button>{/each}</div></fieldset>
 
-        <div class="field-grid"><label><span>SHAPE</span><select bind:value={options.aspectRatio}><option>original</option><option>1:1</option><option>16:9</option><option>4:3</option><option>3:2</option><option>9:16</option></select></label>{#if visualSource}<label><span>VIEW</span><select bind:value={options.fit} onchange={() => { if (options.fit === 'contain') resetFocus(false); }}><option value="contain">Fit</option><option value="cover">Zoom</option></select></label>{:else}<label><span>FORMAT</span><select bind:value={options.format}><option value="png">PNG</option><option value="jpeg">JPG</option></select></label>{/if}</div>
+        {#if visualSource}<fieldset><legend>LOOK</legend><div class="look-grid">{#each ['clean', 'pop', 'noir', 'acid', 'dream'] as value}<button class:active={options.look === value} onclick={() => options.look = value as BeautifyOptions['look']}>{value}</button>{/each}</div></fieldset>{/if}
+
+        <fieldset><legend>FX</legend><div class="look-grid fx-grid">{#each ['none', 'glow', 'orbit', 'grid'] as value}<button class:active={options.effect === value} onclick={() => options.effect = value as BeautifyOptions['effect']}>{value}</button>{/each}</div></fieldset>
+
+        <div class="field-grid"><label><span>SHAPE</span><select bind:value={options.aspectRatio}><option>original</option><option>1:1</option><option>16:9</option><option>4:3</option><option>3:2</option><option>2:1</option><option>9:16</option><option>4:5</option></select></label>{#if visualSource}<label><span>VIEW</span><select bind:value={options.fit} onchange={() => { if (options.fit === 'contain') resetFocus(false); }}><option value="contain">Fit</option><option value="cover">Zoom</option></select></label>{:else}<label><span>FORMAT</span><select bind:value={options.format}><option value="png">PNG</option><option value="jpeg">JPG</option></select></label>{/if}</div>
 
         <label class="range"><span><b>PADDING</b><output>{options.padding}px</output></span><input type="range" min="0" max="240" step="8" bind:value={options.padding}></label>
         {#if visualSource && options.fit === 'cover'}<label class="range"><span><b>ZOOM</b><output>{Math.round(options.zoom * 100)}%</output></span><input type="range" min="1" max="4" step="0.05" bind:value={options.zoom}></label><button class="reset-focus" onclick={() => resetFocus(false)}><RotateCcw size={13} /> Reset focus</button>{/if}
 
-        <div class="field-grid"><label><span>WIDTH</span><select bind:value={options.width}><option value={1200}>1200 px</option><option value={1600}>1600 px</option><option value={2400}>2400 px</option><option value={3200}>3200 px</option></select></label>{#if visualSource}<label><span>FORMAT</span><select bind:value={options.format}><option value="png">PNG</option><option value="jpeg">JPG</option></select></label>{:else}<label><span>ROUNDED</span><select bind:value={options.radius}><option value={0}>Sharp</option><option value={24}>Soft</option><option value={48}>Round</option></select></label>{/if}</div>
+        <div class="field-grid"><label><span>WIDTH</span><select bind:value={options.width}><option value={800}>800 px</option><option value={1200}>1200 px</option><option value={1600}>1600 px</option><option value={1920}>1920 px</option><option value={2400}>2400 px</option><option value={3200}>3200 px</option><option value={4096}>4096 px</option></select></label>{#if visualSource}<label><span>FORMAT</span><select bind:value={options.format}><option value="png">PNG</option><option value="jpeg">JPG</option></select></label>{:else}<label><span>ROUNDED</span><select bind:value={options.radius}><option value={0}>Sharp</option><option value={24}>Soft</option><option value={48}>Round</option></select></label>{/if}</div>
 
         <div class="export-actions"><Button class="export" size="lg" icon={Download} onclick={download} loadingContent="Rendering…" disabled={!hasSource || sceneLoading}>Download the good stuff</Button><Button class="copy-image" size="icon" variant="accent" icon={Copy} onclick={copyImage} loadingContent="" disabled={!hasSource || sceneLoading} aria-label="Copy image" title="Copy image as PNG" /></div>
-        <p class="microcopy">Local canvas when supported · server-side Chrome Beta otherwise.</p>
+        {#if previewDirty}<Button variant="outline" size="sm" onclick={updateServerPreview} loading={serverLoading}>Update server preview</Button>{/if}
+        <p class="microcopy">Local canvas when supported · on-demand Chrome Beta otherwise.</p>
       {/if}
     </aside>
   </section>
