@@ -68,7 +68,7 @@ In Coolify:
 
 The Compose file passes `PUBLIC_SITE_URL` to both the image build and runtime, gives Chrome a 1 GB shared-memory segment, and exposes port `3000` only to Coolify's proxy rather than publishing it directly on the host.
 
-The Docker build fails early if `PUBLIC_SITE_URL` is missing, Chrome Beta cannot start, or the experimental HTML-in-Canvas API is unavailable. The runtime health check verifies the web process; use an actual export after deployment to verify the full path through the proxy.
+The Docker build fails early if `PUBLIC_SITE_URL` is missing, the packaged browser cannot start, or the experimental HTML-in-Canvas API is unavailable. The runtime health check verifies the web process; use an actual export after deployment to verify the full path through the proxy.
 
 ## MCP
 

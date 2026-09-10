@@ -1,6 +1,6 @@
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
-import { chromeBrowser } from './browser';
+import { standardBrowser } from './browser';
 
 export type CaptureViewport = 'desktop' | 'mobile';
 
@@ -53,7 +53,7 @@ async function assertPublicUrl(value: string): Promise<URL> {
 export async function captureWebsite(value: string, viewportName: CaptureViewport) {
   const url = await assertPublicUrl(value);
   const viewport = viewports[viewportName];
-  const browser = await chromeBrowser();
+  const browser = await standardBrowser();
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
     isMobile: viewport.isMobile,

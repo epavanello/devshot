@@ -1,6 +1,7 @@
 import { chromium, type Browser } from 'playwright';
 
 let browserPromise: Promise<Browser> | undefined;
+let captureBrowserPromise: Promise<Browser> | undefined;
 
 export async function chromeBrowser(): Promise<Browser> {
   if (!browserPromise) {
@@ -22,4 +23,19 @@ export async function chromeBrowser(): Promise<Browser> {
     browserPromise = launch;
   }
   return browserPromise;
+}
+
+export async function standardBrowser(): Promise<Browser> {
+  captureBrowserPromise ??= chromium.launch({
+    channel: 'chrome',
+    headless: true
+  }).catch(async () => {
+    try {
+      return await chromium.launch({ headless: true });
+    } catch (error) {
+      captureBrowserPromise = undefined;
+      throw new Error(`DevShot needs Chrome or Playwright Chromium to capture websites. Install Chromium with "pnpm exec playwright install chromium", then restart DevShot. ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+  return captureBrowserPromise;
 }
