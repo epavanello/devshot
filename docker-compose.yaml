@@ -1,0 +1,21 @@
+name: devshot
+
+services:
+  app:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:?Set PUBLIC_SITE_URL to the canonical public origin}
+    environment:
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:?Set PUBLIC_SITE_URL to the canonical public origin}
+      ORIGIN: ${PUBLIC_SITE_URL:?Set PUBLIC_SITE_URL to the canonical public origin}
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      BODY_SIZE_LIMIT: 32M
+    expose:
+      - '3000'
+    shm_size: 1gb
+    restart: unless-stopped
