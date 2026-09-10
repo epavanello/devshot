@@ -1,28 +1,17 @@
-import { chromium, type Browser } from 'playwright';
 import { createSceneDocument, safeDataUrl, type SceneInput } from '../core/scene';
+import { getSiteUrl } from '../config/site';
+import { chromeBrowser } from './browser';
 
-let browserPromise: Promise<Browser> | undefined;
+type RenderSceneInput = Omit<SceneInput, 'siteUrl'> & { siteUrl?: string };
 
-async function browser() {
-  browserPromise ??= chromium.launch({
-    channel: 'chrome-beta',
-    headless: true,
-    args: ['--enable-features=CanvasDrawElement']
-  }).catch((error) => {
-    browserPromise = undefined;
-    throw new Error(`DevShot requires a local Chrome Beta with HTML-in-Canvas enabled. ${error instanceof Error ? error.message : String(error)}`);
-  });
-  return browserPromise;
-}
-
-export async function renderScene(input: SceneInput): Promise<Buffer> {
-  const instance = await browser();
+export async function renderScene(input: RenderSceneInput): Promise<Buffer> {
+  const instance = await chromeBrowser();
   const page = await instance.newPage({ deviceScaleFactor: 1 });
   try {
     let sourceWidth = input.sourceWidth;
     let sourceHeight = input.sourceHeight;
-    if (!sourceWidth || !sourceHeight) {
-      const source = safeDataUrl(input.imageDataUrl);
+    if ((!input.kind || input.kind === 'image' || input.kind === 'website') && (!sourceWidth || !sourceHeight)) {
+      const source = safeDataUrl(input.imageDataUrl ?? '');
       await page.setContent(`<img id="probe" src="${source}">`, { waitUntil: 'load' });
       const dimensions = await page.locator('#probe').evaluate((image) => {
         const element = image as HTMLImageElement;
@@ -31,7 +20,7 @@ export async function renderScene(input: SceneInput): Promise<Buffer> {
       sourceWidth = dimensions.width;
       sourceHeight = dimensions.height;
     }
-    await page.setContent(createSceneDocument({ ...input, sourceWidth, sourceHeight }), { waitUntil: 'load' });
+    await page.setContent(await createSceneDocument({ ...input, sourceWidth, sourceHeight, siteUrl: input.siteUrl ?? getSiteUrl() }), { waitUntil: 'load' });
     await page.waitForFunction(() => (window as unknown as { __DEVSHOT_READY__?: boolean }).__DEVSHOT_READY__ === true, null, { timeout: 15_000 });
     return await page.locator('#shot').screenshot({
       type: input.options.format === 'jpeg' ? 'jpeg' : 'png',

@@ -3,7 +3,7 @@ import { beautifyOptionsSchema, ratioValue } from './options';
 
 describe('beautify options', () => {
   it('keeps defaults opinionated', () => {
-    expect(beautifyOptionsSchema.parse({})).toMatchObject({ background: 'lemonade', aspectRatio: '16:9', shadow: 'float' });
+    expect(beautifyOptionsSchema.parse({})).toMatchObject({ background: 'lemonade', aspectRatio: '16:9', shadow: 'float', style: 'clean', zoom: 1 });
   });
 
   it('rejects oversized renders', () => {

@@ -5,6 +5,7 @@ export const aspectRatios = ['original', '1:1', '16:9', '4:3', '3:2', '9:16'] as
 export const fitModes = ['contain', 'cover'] as const;
 export const shadowStyles = ['none', 'soft', 'float', 'hard'] as const;
 export const outputFormats = ['png', 'jpeg'] as const;
+export const frameStyles = ['clean', 'browser', 'poster'] as const;
 
 export const beautifyOptionsSchema = z.object({
   background: z.enum(backgroundIds).default('lemonade'),
@@ -13,6 +14,10 @@ export const beautifyOptionsSchema = z.object({
   padding: z.number().int().min(0).max(320).default(96),
   radius: z.number().int().min(0).max(96).default(24),
   shadow: z.enum(shadowStyles).default('float'),
+  style: z.enum(frameStyles).default('clean'),
+  focusX: z.number().min(0).max(1).default(0.5),
+  focusY: z.number().min(0).max(1).default(0.5),
+  zoom: z.number().min(1).max(4).default(1),
   width: z.number().int().min(320).max(4096).default(1600),
   format: z.enum(outputFormats).default('png'),
   quality: z.number().int().min(40).max(100).default(92)
