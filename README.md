@@ -58,9 +58,7 @@ Open `http://localhost:4173` in Chrome Beta with the flag enabled.
 
 ## Deploy on Coolify
 
-Use the repository Docker Compose configuration rather than Nixpacks. Compose builds the included `Dockerfile`, which installs the exact Google Chrome Beta channel used by the server renderer and its Linux libraries, then runs the SvelteKit Node server as a non-root user.
-
-The Coolify host must be `x86_64`/`amd64`: Playwright's branded Google Chrome Beta installer is not available for Linux ARM64. On Apple Silicon, test the production image with `docker build --platform linux/amd64`.
+Use the repository Docker Compose configuration rather than Nixpacks. Compose builds the included `Dockerfile`, which installs Playwright's pinned Chrome for Testing build and its Linux libraries, then runs the SvelteKit Node server as a non-root user. The image builds natively on both `amd64` and `arm64`; local development continues to use Chrome Beta by default.
 
 In Coolify:
 
@@ -68,7 +66,7 @@ In Coolify:
 2. Add `PUBLIC_SITE_URL=https://your-domain.example`.
 3. Configure the public domain on the `app` service, port `3000`, and deploy.
 
-The Compose file passes `PUBLIC_SITE_URL` to both the image build and runtime, pins the service to `linux/amd64`, gives Chrome a 1 GB shared-memory segment, and exposes port `3000` only to Coolify's proxy rather than publishing it directly on the host.
+The Compose file passes `PUBLIC_SITE_URL` to both the image build and runtime, gives Chrome a 1 GB shared-memory segment, and exposes port `3000` only to Coolify's proxy rather than publishing it directly on the host.
 
 The Docker build fails early if `PUBLIC_SITE_URL` is missing, Chrome Beta cannot start, or the experimental HTML-in-Canvas API is unavailable. The runtime health check verifies the web process; use an actual export after deployment to verify the full path through the proxy.
 

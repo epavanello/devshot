@@ -28,6 +28,8 @@ ENV PORT=3000
 ENV BODY_SIZE_LIMIT=32M
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV DEVSHOT_CHROME_CHANNEL=chromium
 
 ARG PUBLIC_SITE_URL
 ENV PUBLIC_SITE_URL=$PUBLIC_SITE_URL
@@ -38,13 +40,14 @@ RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 RUN pnpm install --prod --frozen-lockfile \
-  && pnpm exec playwright install --with-deps chrome-beta \
+  && pnpm exec playwright install --with-deps chromium \
+  && chmod -R a+rX "$PLAYWRIGHT_BROWSERS_PATH" \
   && apt-get update \
   && apt-get install -y --no-install-recommends tini \
   && rm -rf /var/lib/apt/lists/* \
   && pnpm store prune
 
-RUN node --input-type=module -e "import { chromium } from 'playwright'; const browser = await chromium.launch({ channel: 'chrome-beta', headless: true, args: ['--enable-features=CanvasDrawElement'] }); const page = await browser.newPage(); const supported = await page.evaluate(() => 'drawElementImage' in CanvasRenderingContext2D.prototype && 'requestPaint' in HTMLCanvasElement.prototype); await browser.close(); if (!supported) throw new Error('Chrome Beta does not expose HTML-in-Canvas');"
+RUN node --input-type=module -e "import { chromium } from 'playwright'; const browser = await chromium.launch({ headless: true, args: ['--enable-features=CanvasDrawElement'] }); const page = await browser.newPage(); const supported = await page.evaluate(() => 'drawElementImage' in CanvasRenderingContext2D.prototype && 'requestPaint' in HTMLCanvasElement.prototype); await browser.close(); if (!supported) throw new Error('Playwright Chromium does not expose HTML-in-Canvas');"
 
 COPY --from=builder --chown=node:node /app/build ./build
 
